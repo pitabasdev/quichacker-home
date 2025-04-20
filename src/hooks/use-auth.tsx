@@ -1,9 +1,9 @@
 import { createContext, ReactNode, useContext, useState, useEffect } from "react";
 import {
   useQuery,
-  useMutation,
+ 
 } from "@tanstack/react-query";
-import { User } from "../shared/schema";
+import { User } from "../lib/shared/schema";
 import { getQueryFn, apiRequest, queryClient } from "../lib/queryClient";
 import { useToast } from "../hooks/use-toast";
 
@@ -24,10 +24,7 @@ type RegisterData = {
   name: string;
 };
 
-type LoginData = {
-  email: string;
-  password: string;
-};
+
 
 export const AuthContext = createContext<AuthContextType | null>(null);
 
@@ -39,7 +36,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     data: user,
     error,
     isLoading,
-    refetch,
+    
   } = useQuery<User | null, Error>({
     queryKey: ['/api/auth/me'],
     queryFn: getQueryFn({ on401: "returnNull" }),

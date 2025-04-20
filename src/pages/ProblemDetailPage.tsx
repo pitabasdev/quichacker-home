@@ -2,7 +2,7 @@ import { useParams } from 'wouter';
 import { useState, useEffect } from 'react';
 import CircuitLines from "../components/ui/CircuitLines";
 import { Link } from 'wouter';
-import { ChevronLeft, CheckCircle, Clock, Trophy, Users, BookOpen, Code, FileText, AlertTriangle } from 'lucide-react';
+import { ChevronLeft, CheckCircle, Clock, Trophy, Users, BookOpen, Code, AlertTriangle } from 'lucide-react';
 
 // Reusing the Problem interface from ProblemStatementsSection
 type ProblemCategory = 'AI & ML' | 'Cybersecurity' | 'Blockchain' | 'Healthcare' | 'Green Tech';

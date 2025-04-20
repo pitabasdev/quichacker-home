@@ -58,13 +58,7 @@ export default function Navigation() {
   ];
 
   // Keep the array for footer links, but don't display in navigation
-  const secondaryLinks = [
-    { name: 'Support', href: '/support' },
-    { name: 'FAQ', href: '/faq' },
-    { name: 'Help Center', href: '/help' },
-    { name: 'Terms of Service', href: '/terms' },
-    { name: 'Privacy Policy', href: '/privacy' },
-  ];
+
 
   return (
     <>

@@ -17,7 +17,7 @@ import {
   FormLabel,
   FormMessage,
 } from '../components/ui/form';
-import { queryClient, apiRequest } from '../lib/queryClient';
+
 
 // Define form schema using Zod
 const loginSchema = z.object({

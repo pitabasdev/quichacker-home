@@ -1,7 +1,7 @@
-import { useState } from 'react';
+
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Link } from 'wouter';
-import { queryClient, apiRequest } from '../lib/queryClient';
+
 import { useToast } from '../hooks/use-toast';
 
 // UI components
@@ -45,7 +45,7 @@ import {
   AlertCircle, 
   CheckCircle2,
   MessageSquare,
-  Settings,
+
   Eye
 } from 'lucide-react';
 

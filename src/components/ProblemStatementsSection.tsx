@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import GlassmorphicCard from "./ui/GlassmorphicCard";
+
 
 type ProblemCategory = 'AI & ML' | 'Cybersecurity' | 'Blockchain' | 'Healthcare' | 'Green Tech';
 

@@ -85,7 +85,7 @@ export default function CategoriesSection() {
 
         {/* Challenges Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {currentChallenges.map((challenge, index) => (
+          {currentChallenges.map((challenge) => (
             <div
               key={challenge.id}
               className="relative perspective-1000 group"

@@ -85,7 +85,7 @@ export default function SponsorsSection() {
               const radius = 250; // Adjust for desired circle size
               const x = Math.sin(angle) * radius;
               const z = Math.cos(angle) * radius;
-              const offset = 20 + Math.sin(rotationDegree * 0.05 + index) * 10;
+      
               
               return (
                 <div

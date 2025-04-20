@@ -1,6 +1,6 @@
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { Link } from 'wouter';
+
 import { queryClient, apiRequest } from '../lib/queryClient';
 import { useToast } from '../hooks/use-toast';
 
@@ -155,7 +155,7 @@ function DashboardSection({ children, title, icon, count, variant }: {
 }
 
 export default function AdminDashboardPage() {
-  const [activeTab, setActiveTab] = useState('overview');
+  const [ , setActiveTab] = useState('overview');
   const [searchQuery, setSearchQuery] = useState('');
   const [isCredentialsDialogOpen, setIsCredentialsDialogOpen] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
@@ -185,7 +185,7 @@ export default function AdminDashboardPage() {
   const { toast } = useToast();
 
   // Fetch teams from API
-  const { data: teamsData, isLoading: isLoadingTeams } = useQuery({
+  const { data: teamsData } = useQuery({
     queryKey: ['/api/teams'],
     queryFn: async () => {
       // Fetch teams from the API
@@ -225,7 +225,7 @@ export default function AdminDashboardPage() {
   });
 
   // Fetch participants (mock data for now)
-  const { data: participantsData, isLoading: isLoadingParticipants } = useQuery({
+  const { data: participantsData} = useQuery({
     queryKey: ['/api/users'],
     queryFn: async () => {
       // This would be a real API call in a production app
@@ -244,7 +244,7 @@ export default function AdminDashboardPage() {
   });
 
   // Fetch submissions (mock data for now)
-  const { data: submissionsData, isLoading: isLoadingSubmissions } = useQuery({
+  const { data: submissionsData } = useQuery({
     queryKey: ['/api/submissions'],
     queryFn: async () => {
       // This would be a real API call in a production app

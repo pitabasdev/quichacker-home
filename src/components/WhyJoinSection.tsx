@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
-import { useIsMobile } from '../hooks/use-mobile';
+import { useState } from 'react';
+
 import { ChevronRight } from 'lucide-react';
 import { Link } from 'wouter';
 
 export default function WhyJoinSection() {
-  const isMobile = useIsMobile();
+ 
   const [hoveredCard, setHoveredCard] = useState<number | null>(null);
 
   const benefits = [
@@ -53,7 +53,7 @@ export default function WhyJoinSection() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-          {benefits.map((benefit, index) => (
+          {benefits.map((benefit) => (
             <div
               key={benefit.id}
               className="relative group perspective-1000"
