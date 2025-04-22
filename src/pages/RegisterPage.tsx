@@ -1,14 +1,11 @@
-
-import CircuitLines from "../components/ui/CircuitLines";
 import { useForm, useFieldArray } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useState } from "react";
-import { apiRequest } from "../lib/queryClient"; 
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { Plus, Trash2, Loader2 } from "lucide-react";
 import { toast } from "../hooks/use-toast";
-import { useQuery } from "@tanstack/react-query";
+import CircuitLines from "../components/ui/CircuitLines";
 
 // Define the team member schema
 const teamMemberSchema = z.object({
@@ -44,45 +41,45 @@ const registerSchema = z.object({
 
 type RegisterFormValues = z.infer<typeof registerSchema>;
 
-// Define a type for problem data
 interface Problem {
-  id: number;
+  _id: string;
   title: string;
   category: string;
-  slug: string;
   description: string;
   isActive: boolean;
 }
 
 export default function RegisterPage() {
   const [isLoading, setIsLoading] = useState(false);
+  const [problems, setProblems] = useState<Problem[]>([]);
+  const [isLoadingProblems, setIsLoadingProblems] = useState(true);
   const [, setLocation] = useLocation();
 
-  // Fetch active problems from the API
-  const { data: problems, isLoading: isLoadingProblems } = useQuery<Problem[]>({
-    queryKey: ['/api/problems'],
-    queryFn: async () => {
+  // Fetch problems from API
+  useEffect(() => {
+    const fetchProblems = async () => {
       try {
-        console.log('Fetching problem statements...');
-        const response = await fetch('/api/problems?active=true');
+        const response = await fetch('http://localhost:5000/api/problems');
         if (!response.ok) {
-          console.error('Failed to load problem statements:', response.status, response.statusText);
-          throw new Error('Failed to load problem statements');
+          throw new Error('Failed to fetch problems');
         }
         const data = await response.json();
-        console.log('Fetched problem statements:', data);
-        return data;
+        setProblems(data);
       } catch (error) {
-        console.error('Error fetching problem statements:', error);
-        // Return an empty array instead of throwing to prevent the app from breaking
-        return [];
+        console.error('Error fetching problems:', error);
+        toast({
+          title: "Error loading problems",
+          description: "Could not load problem statements. Please try again later.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoadingProblems(false);
       }
-    },
-    // Disable retries and set a longer stale time
-    retry: 2,
-    staleTime: 60000
-  });
-  
+    };
+
+    fetchProblems();
+  }, []);
+
   const { register, control, watch, handleSubmit, formState: { errors } } = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema),
     defaultValues: {
@@ -99,48 +96,41 @@ export default function RegisterPage() {
       agreeTerms: false
     }
   });
-  
+
   const { fields, append, remove } = useFieldArray({
     control,
     name: "teamMembers"
   });
-  
-  // Watch the team size to adjust the number of team member fields
+
   const teamSize = watch("teamSize");
 
-  
-  // Update team members fields when team size changes
   const updateTeamMemberFields = (size: number) => {
     const currentSize = fields.length;
-    
+
     if (size > currentSize) {
-      // Add fields
       for (let i = 0; i < size - currentSize; i++) {
         append({ name: "", email: "", gender: "male" });
       }
     } else if (size < currentSize) {
-      // Remove fields from the end
       for (let i = currentSize - 1; i >= size; i--) {
         remove(i);
       }
     }
   };
-  
-  // Handle team size change
+
   const handleTeamSizeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newSize = parseInt(e.target.value, 10);
     updateTeamMemberFields(newSize);
   };
-  
+
   const onSubmit = async (data: RegisterFormValues) => {
     try {
       setIsLoading(true);
-      
-      // Format data for API
+
       const formattedData = {
         team: {
           name: data.teamName,
-          problemId: parseInt(data.problem),
+          problemId: data.problem === "0" ? null : data.problem,
           description: `Team of ${data.teamSize} members`,
         },
         leader: {
@@ -155,38 +145,43 @@ export default function RegisterPage() {
           gender: member.gender,
         })),
       };
-      
-      // Send registration request
-      const response = await apiRequest("POST", "/api/register-team", formattedData);
-      const result = await response.json();
-      
-      if (response.ok) {
-        toast({
-          title: "Registration successful!",
-          description: "Your team has been registered. We'll contact you with further instructions.",
-          variant: "default",
-        });
-        
-        // Display the leader credentials that were returned
-        if (result.leader && result.leader.username && result.leader.password) {
-          toast({
-            title: "Save your credentials!",
-            description: `Username: ${result.leader.username} | Password: ${result.leader.password}`,
-            variant: "default",
-            duration: 10000, // Show for 10 seconds
-          });
-        }
-        
-        // Navigate to home page
-        setLocation("/");
-      } else {
-        throw new Error(result.error || result.message || "Registration failed");
+
+      const response = await fetch('http://localhost:5000/api/register-team', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formattedData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Registration failed');
       }
+
+      const result = await response.json();
+
+      toast({
+        title: "Registration successful!",
+        description: "Your team has been registered.",
+        variant: "default",
+      });
+
+      if (result.credentials?.leader) {
+        toast({
+          title: "Save your credentials!",
+          description: `Username: ${result.credentials.leader.email} | Password: ${result.credentials.leader.password}`,
+          variant: "default",
+          duration: 10000,
+        });
+      }
+
+      setLocation("/");
     } catch (error) {
       console.error("Registration error:", error);
       toast({
         title: "Registration failed",
-        description: error instanceof Error ? error.message : "An error occurred during registration",
+        description: error instanceof Error ? error.message : "An error occurred",
         variant: "destructive",
       });
     } finally {
@@ -198,26 +193,26 @@ export default function RegisterPage() {
     <div className="relative">
       <div className="absolute inset-0 bg-gradient-radial from-[#1A1A2E] to-[#0D1117] z-[-2]"></div>
       <CircuitLines />
-      
+
       <div className="py-20">
         <div className="container mx-auto px-4">
           <h2 className="font-orbitron text-3xl md:text-4xl font-bold text-center mb-10 text-shadow-neon-pink">
             REGISTER YOUR TEAM
           </h2>
-          
+
           <div className="max-w-4xl mx-auto glassmorphism rounded-xl p-8 border border-[#FF007F]/30 relative">
             <div className="absolute -inset-0.5 bg-gradient-to-r from-[#FF007F] via-[#007BFF] to-[#00FFD1] opacity-20 rounded-xl blur-sm z-[-1]"></div>
-            
+
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
               {/* Team Info Section */}
               <div className="space-y-4">
                 <h3 className="font-orbitron text-xl text-[#00FFD1] border-b border-[#00FFD1]/30 pb-2">Team Information</h3>
-                
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label className="block font-orbitron text-sm mb-2" htmlFor="teamName">Team Name</label>
-                    <input 
-                      type="text" 
+                    <input
+                      type="text"
                       id="teamName"
                       className={`w-full bg-[#1A1A2E]/70 text-white border ${errors.teamName ? 'border-red-500' : 'border-[#007BFF]/30'} rounded-md px-4 py-3 focus:outline-none focus:border-[#007BFF] focus:ring-1 focus:ring-[#007BFF]/50`}
                       placeholder="Your Team Name"
@@ -225,10 +220,10 @@ export default function RegisterPage() {
                     />
                     {errors.teamName && <p className="text-red-500 text-xs mt-1">{errors.teamName.message}</p>}
                   </div>
-                  
+
                   <div>
                     <label className="block font-orbitron text-sm mb-2" htmlFor="teamSize">Team Size</label>
-                    <select 
+                    <select
                       id="teamSize"
                       className={`w-full bg-[#1A1A2E]/70 text-white border ${errors.teamSize ? 'border-red-500' : 'border-[#007BFF]/30'} rounded-md px-4 py-3 focus:outline-none focus:border-[#007BFF] focus:ring-1 focus:ring-[#007BFF]/50 appearance-none`}
                       {...register("teamSize")}
@@ -241,7 +236,7 @@ export default function RegisterPage() {
                     {errors.teamSize && <p className="text-red-500 text-xs mt-1">{errors.teamSize.message}</p>}
                   </div>
                 </div>
-                
+
                 <div>
                   <label className="block font-orbitron text-sm mb-2" htmlFor="problem">Problem Statement</label>
                   {isLoadingProblems ? (
@@ -250,15 +245,16 @@ export default function RegisterPage() {
                       <span className="text-gray-400">Loading problem statements...</span>
                     </div>
                   ) : (
-                    <select 
+                    // In your dropdown rendering:
+                    <select
                       id="problem"
                       className={`w-full bg-[#1A1A2E]/70 text-white border ${errors.problem ? 'border-red-500' : 'border-[#007BFF]/30'} rounded-md px-4 py-3 focus:outline-none focus:border-[#007BFF] focus:ring-1 focus:ring-[#007BFF]/50 appearance-none`}
                       {...register("problem")}
                     >
                       <option value="">Select a problem statement</option>
-                      {problems?.map(problem => (
-                        <option key={problem.id} value={problem.id.toString()}>
-                          {problem.title}
+                      {problems.map(problem => ( // Removed the .filter(p => p.isActive)
+                        <option key={problem._id} value={problem._id}>
+                          {problem.title} - {problem.category}
                         </option>
                       ))}
                       <option value="0">Other / Not decided yet</option>
@@ -267,16 +263,16 @@ export default function RegisterPage() {
                   {errors.problem && <p className="text-red-500 text-xs mt-1">{errors.problem.message}</p>}
                 </div>
               </div>
-              
+
               {/* Team Leader Section */}
               <div className="space-y-4">
                 <h3 className="font-orbitron text-xl text-[#FF007F] border-b border-[#FF007F]/30 pb-2">Team Leader</h3>
-                
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label className="block font-orbitron text-sm mb-2" htmlFor="leaderName">Full Name</label>
-                    <input 
-                      type="text" 
+                    <input
+                      type="text"
                       id="leaderName"
                       className={`w-full bg-[#1A1A2E]/70 text-white border ${errors.teamLeader?.name ? 'border-red-500' : 'border-[#007BFF]/30'} rounded-md px-4 py-3 focus:outline-none focus:border-[#007BFF] focus:ring-1 focus:ring-[#007BFF]/50`}
                       placeholder="Team Leader's Full Name"
@@ -284,25 +280,25 @@ export default function RegisterPage() {
                     />
                     {errors.teamLeader?.name && <p className="text-red-500 text-xs mt-1">{errors.teamLeader.name.message}</p>}
                   </div>
-                  
+
                   <div>
                     <label className="block font-orbitron text-sm mb-2" htmlFor="leaderEmail">Email</label>
-                    <input 
-                      type="email" 
+                    <input
+                      type="email"
                       id="leaderEmail"
                       className={`w-full bg-[#1A1A2E]/70 text-white border ${errors.teamLeader?.email ? 'border-red-500' : 'border-[#007BFF]/30'} rounded-md px-4 py-3 focus:outline-none focus:border-[#007BFF] focus:ring-1 focus:ring-[#007BFF]/50`}
-                      placeholder="team.leader..example.com"
+                      placeholder="team.leader@example.com"
                       {...register("teamLeader.email")}
                     />
                     {errors.teamLeader?.email && <p className="text-red-500 text-xs mt-1">{errors.teamLeader.email.message}</p>}
                   </div>
                 </div>
-                
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label className="block font-orbitron text-sm mb-2" htmlFor="leaderPhone">Phone Number</label>
-                    <input 
-                      type="tel" 
+                    <input
+                      type="tel"
                       id="leaderPhone"
                       className={`w-full bg-[#1A1A2E]/70 text-white border ${errors.teamLeader?.phone ? 'border-red-500' : 'border-[#007BFF]/30'} rounded-md px-4 py-3 focus:outline-none focus:border-[#007BFF] focus:ring-1 focus:ring-[#007BFF]/50`}
                       placeholder="Your Contact Number"
@@ -310,10 +306,10 @@ export default function RegisterPage() {
                     />
                     {errors.teamLeader?.phone && <p className="text-red-500 text-xs mt-1">{errors.teamLeader.phone.message}</p>}
                   </div>
-                  
+
                   <div>
                     <label className="block font-orbitron text-sm mb-2" htmlFor="leaderGender">Gender</label>
-                    <select 
+                    <select
                       id="leaderGender"
                       className={`w-full bg-[#1A1A2E]/70 text-white border ${errors.teamLeader?.gender ? 'border-red-500' : 'border-[#007BFF]/30'} rounded-md px-4 py-3 focus:outline-none focus:border-[#007BFF] focus:ring-1 focus:ring-[#007BFF]/50 appearance-none`}
                       {...register("teamLeader.gender")}
@@ -326,7 +322,7 @@ export default function RegisterPage() {
                   </div>
                 </div>
               </div>
-              
+
               {/* Team Members Section */}
               <div className="space-y-4">
                 <div className="flex justify-between items-center border-b border-[#007BFF]/30 pb-2">
@@ -335,20 +331,20 @@ export default function RegisterPage() {
                     <span className="text-[#007BFF]">*</span> At least one female member required
                   </p>
                 </div>
-                
+
                 {errors.teamMembers?.root && (
                   <div className="bg-red-500/20 border border-red-500 rounded-md p-3 text-red-400 text-sm">
                     {errors.teamMembers.root.message}
                   </div>
                 )}
-                
+
                 {fields.map((field, index) => (
                   <div key={field.id} className="p-4 bg-[#1A1A2E]/50 rounded-md border border-[#007BFF]/20">
                     <div className="flex justify-between items-center mb-3">
                       <h4 className="font-orbitron text-[#007BFF]">Member {index + 1}</h4>
                       {fields.length > 1 && (
-                        <button 
-                          type="button" 
+                        <button
+                          type="button"
                           onClick={() => remove(index)}
                           className="text-red-400 hover:text-red-300 transition-colors"
                         >
@@ -356,11 +352,11 @@ export default function RegisterPage() {
                         </button>
                       )}
                     </div>
-                    
+
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div>
                         <label className="block text-sm mb-1" htmlFor={`member-${index}-name`}>Full Name</label>
-                        <input 
+                        <input
                           type="text"
                           id={`member-${index}-name`}
                           className={`w-full bg-black/30 text-white border ${errors.teamMembers?.[index]?.name ? 'border-red-500' : 'border-[#007BFF]/30'} rounded-md px-3 py-2 focus:outline-none focus:border-[#007BFF]`}
@@ -371,10 +367,10 @@ export default function RegisterPage() {
                           <p className="text-red-500 text-xs mt-1">{errors.teamMembers[index]?.name?.message}</p>
                         )}
                       </div>
-                      
+
                       <div>
                         <label className="block text-sm mb-1" htmlFor={`member-${index}-email`}>Email</label>
-                        <input 
+                        <input
                           type="email"
                           id={`member-${index}-email`}
                           className={`w-full bg-black/30 text-white border ${errors.teamMembers?.[index]?.email ? 'border-red-500' : 'border-[#007BFF]/30'} rounded-md px-3 py-2 focus:outline-none focus:border-[#007BFF]`}
@@ -385,10 +381,10 @@ export default function RegisterPage() {
                           <p className="text-red-500 text-xs mt-1">{errors.teamMembers[index]?.email?.message}</p>
                         )}
                       </div>
-                      
+
                       <div>
                         <label className="block text-sm mb-1" htmlFor={`member-${index}-gender`}>Gender</label>
-                        <select 
+                        <select
                           id={`member-${index}-gender`}
                           className={`w-full bg-black/30 text-white border ${errors.teamMembers?.[index]?.gender ? 'border-red-500' : 'border-[#007BFF]/30'} rounded-md px-3 py-2 focus:outline-none focus:border-[#007BFF] appearance-none`}
                           {...register(`teamMembers.${index}.gender` as const)}
@@ -404,9 +400,9 @@ export default function RegisterPage() {
                     </div>
                   </div>
                 ))}
-                
+
                 {fields.length < parseInt(teamSize, 10) && (
-                  <button 
+                  <button
                     type="button"
                     onClick={() => append({ name: "", email: "", gender: "male" })}
                     className="flex items-center justify-center gap-2 w-full py-2 mt-3 bg-[#007BFF]/10 hover:bg-[#007BFF]/20 text-[#007BFF] rounded-md border border-dashed border-[#007BFF]/40 transition-colors"
@@ -416,7 +412,7 @@ export default function RegisterPage() {
                   </button>
                 )}
               </div>
-              
+
               {/* Terms and Submit */}
               <div className="space-y-6 pt-4">
                 <div className="flex items-start">
@@ -435,16 +431,16 @@ export default function RegisterPage() {
                     {errors.agreeTerms && <p className="text-red-500 text-xs mt-1">{errors.agreeTerms.message}</p>}
                   </div>
                 </div>
-                
-                <button 
-                  type="submit" 
+
+                <button
+                  type="submit"
                   disabled={isLoading}
                   className="w-full bg-[#FF007F]/20 border border-[#FF007F] text-[#FF007F] font-orbitron font-bold py-3 rounded-md hover:bg-[#FF007F] hover:text-[#0D1117] transition-all duration-300 group relative overflow-hidden disabled:opacity-70 disabled:cursor-not-allowed"
                 >
                   <span className="relative z-10 flex items-center justify-center gap-2">
                     {isLoading ? (
                       <>
-                        <Loader2 className="animate-spin h-5 w-5" /> 
+                        <Loader2 className="animate-spin h-5 w-5" />
                         SUBMITTING...
                       </>
                     ) : (

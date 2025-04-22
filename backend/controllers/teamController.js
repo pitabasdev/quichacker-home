@@ -1,7 +1,20 @@
-const mongoose = require('mongoose'); // Add this at the top
-const { v4: uuidv4 } = require('uuid'); // Also import uuid if not already done
+const mongoose = require('mongoose');
+const { v4: uuidv4 } = require('uuid');
+const nodemailer = require('nodemailer');
 const Team = require('../models/Team');
 const Problem = require('../models/Problem');
+require("dotenv").config()
+
+// Configure email transporter
+const transporter = nodemailer.createTransport({
+  host: "email-smtp.us-east-1.amazonaws.com",
+  port: 587,
+  secure: false,
+  auth: {
+    user: process.env.EMAIL,
+    pass: process.env.EMAIL_PASS,
+  },
+});
 
 const registerTeam = async (req, res) => {
     const session = await mongoose.startSession();
@@ -16,11 +29,13 @@ const registerTeam = async (req, res) => {
         return res.status(400).json({ error: 'Invalid request data' });
       }
   
-      // Check if problem exists
-      const problemExists = await Problem.findById(team.problemId).session(session);
-      if (!problemExists) {
-        await session.abortTransaction();
-        return res.status(400).json({ error: 'Selected problem statement does not exist' });
+      // Check if problem exists (skip if problemId is "0")
+      if (team.problemId && team.problemId !== "0") {
+        const problemExists = await Problem.findById(team.problemId).session(session);
+        if (!problemExists) {
+          await session.abortTransaction();
+          return res.status(400).json({ error: 'Selected problem statement does not exist' });
+        }
       }
   
       // Check if any email (leader or members) already exists in the system
@@ -45,7 +60,7 @@ const registerTeam = async (req, res) => {
       const newTeam = new Team({
         name: team.name,
         description: team.description,
-        problem: team.problemId,
+        problem: team.problemId === "0" ? null : team.problemId,
         leader: {
           name: leader.name,
           email: leader.email,
@@ -64,22 +79,28 @@ const registerTeam = async (req, res) => {
       await newTeam.save({ session });
       await session.commitTransaction();
       
-      // Return credentials for all team members
+      // Prepare credentials for response and email
       const credentials = {
+        teamName: team.name,
         leader: {
+          name: leader.name,
           email: leader.email,
           password: leaderPassword,
           role: 'leader'
         },
         members: members.map((member, index) => ({
+          name: member.name,
           email: member.email,
           password: memberPasswords[index],
           role: 'member'
         }))
       };
+
+      // Send emails with credentials
+      await sendRegistrationEmails(credentials);
   
       res.status(201).json({
-        message: 'Team registration successful',
+        message: 'Team registration successful. Credentials have been emailed to all members.',
         credentials
       });
   
@@ -98,7 +119,52 @@ const registerTeam = async (req, res) => {
     } finally {
       session.endSession();
     }
-  };
+};
+
+// Function to send registration emails
+async function sendRegistrationEmails(credentials) {
+  try {
+    // Email to team leader
+    await transporter.sendMail({
+      from: `"Competition Team" <hr@infotactlearning.in>`,
+      to: credentials.leader.email,
+      subject: `Your Team ${credentials.teamName} Registration Details`,
+      html: `
+        <h2>Welcome, ${credentials.leader.name}!</h2>
+        <p>Your team <strong>${credentials.teamName}</strong> has been successfully registered.</p>
+        <h3>Your Login Credentials:</h3>
+        <p><strong>Email:</strong> ${credentials.leader.email}</p>
+        <p><strong>Password:</strong> ${credentials.leader.password}</p>
+        <p><strong>Role:</strong> Team Leader</p>
+        <p>Please keep these credentials secure and don't share them with others.</p>
+        <p>You can now log in to the competition portal using these credentials.</p>
+      `
+    });
+
+    // Emails to team members
+    for (const member of credentials.members) {
+      await transporter.sendMail({
+        from: `"Competition Team" Competition Team" <hr@infotactlearning.in>`,
+        to: member.email,
+        subject: `Welcome to Team ${credentials.teamName}`,
+        html: `
+          <h2>Welcome, ${member.name}!</h2>
+          <p>You have been added to team <strong>${credentials.teamName}</strong>.</p>
+          <h3>Your Login Credentials:</h3>
+          <p><strong>Email:</strong> ${member.email}</p>
+          <p><strong>Password:</strong> ${member.password}</p>
+          <p><strong>Role:</strong> Team Member</p>
+          <p>Please keep these credentials secure and don't share them with others.</p>
+          <p>You can now log in to the competition portal using these credentials.</p>
+          <p>Team Leader: ${credentials.leader.name} (${credentials.leader.email})</p>
+        `
+      });
+    }
+  } catch (emailError) {
+    console.error('Error sending emails:', emailError);
+    // Don't fail the registration if emails fail to send
+  }
+}
 
 const createProblem = async (req, res) => {
   try {

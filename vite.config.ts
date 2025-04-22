@@ -24,12 +24,21 @@ export default defineConfig(async () => {
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "src"),
-
       },
     },
     build: {
       outDir: path.resolve(__dirname, "dist"),
       emptyOutDir: true,
     },
+    server: {
+      proxy: {
+        '/api': {
+          target: 'http://localhost:5000', // Your backend server URL
+          changeOrigin: true,
+          secure: false,
+        
+        }
+      }
+    }
   };
 });

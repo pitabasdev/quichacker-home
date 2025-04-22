@@ -1,64 +1,77 @@
-const Team = require("../models/Team");
-const bcrypt = require("bcrypt");
-const jwt = require("jsonwebtoken");
+const Team = require('../models/Team');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 
-const loginUser = async (req, res) => {
+const loginTeamMember = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    if (!email || !password) {
-      return res.status(400).json({ error: "Email and password are required" });
-    }
-
+    // Find team that has either leader or member with this email
     const team = await Team.findOne({
       $or: [
-        { "leader.email": email },
-        { "members.email": email }
+        { 'leader.email': email },
+        { 'members.email': email }
       ]
     });
 
     if (!team) {
-      return res.status(401).json({ error: "Invalid credentials" });
+      return res.status(401).json({ error: 'Invalid credentials' });
     }
 
+    // Check if email belongs to leader
     let user = null;
-    let role = "";
-
+    let role = 'member';
+    
     if (team.leader.email === email) {
       user = team.leader;
-      role = "leader";
+      role = 'leader';
     } else {
+      // Find the member
       user = team.members.find(member => member.email === email);
-      role = "member";
     }
 
-    const validPassword = await bcrypt.compare(password, user.password);
-    if (!validPassword) {
-      return res.status(401).json({ error: "Invalid credentials" });
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid credentials' });
     }
 
+    // Compare passwords
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    // Create JWT token
     const token = jwt.sign(
-      { email: user.email, name: user.name, role },
+      {
+        userId: team._id,
+        email: user.email,
+        role,
+        name: user.name,
+        teamId: team._id,
+        teamName: team.name
+      },
       process.env.JWT_SECRET,
-      { expiresIn: "1h" }
+      { expiresIn: '7d' }
     );
 
     res.json({
+      message: 'Login successful',
       token,
       user: {
-        email: user.email,
         name: user.name,
-        role
+        email: user.email,
+        role,
+        teamId: team._id,
+        teamName: team.name
       }
     });
 
   } catch (error) {
-    console.error("Login error:", error);
-    res.status(500).json({
-      error: "Internal server error",
-      details: process.env.NODE_ENV === "development" ? error.message : undefined
-    });
+    console.error('Login error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
-module.exports = { loginUser };
+module.exports = {
+  loginTeamMember
+};

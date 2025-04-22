@@ -17,7 +17,7 @@ mongoose
 
 // CORS options
 const corsOptions = {
-  origin: ["http://localhost:3000", "https://your-production-domain.com"],
+  origin: ["http://localhost:5173", "https://your-production-domain.com"],
   methods: ["GET", "POST", "PUT", "DELETE"],
   allowedHeaders: ["Content-Type", "Authorization"],
 };
@@ -27,7 +27,7 @@ app.use(cors(corsOptions));
 app.use(bodyParser.json());
 
 // Routes
-app.use("/api/auth", authRoutes);
+app.use("/api", authRoutes);
 app.use("/api", teamRoutes);
 
 // Error handling middleware

@@ -1,144 +1,153 @@
-import { createContext, ReactNode, useContext, useState, useEffect } from "react";
-import {
-  useQuery,
- 
-} from "@tanstack/react-query";
-import { User } from "../lib/shared/schema";
-import { getQueryFn, apiRequest, queryClient } from "../lib/queryClient";
-import { useToast } from "../hooks/use-toast";
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { useToast } from './use-toast';
+import { useLocation } from 'wouter';
+
+type User = {
+  id: string;
+  name: string;
+  email: string;
+  role: 'admin' | 'leader' | 'member';
+  teamId?: string;
+  teamName?: string;
+};
 
 type AuthContextType = {
   user: User | null;
-  isLoading: boolean;
-  error: Error | null;
   isAdmin: boolean;
-  login: (email: string, password: string) => Promise<User>;
-  logout: () => Promise<void>;
-  register: (userData: RegisterData) => Promise<User>;
+  loading: boolean;
+  login: (email: string, password: string, userType: 'admin' | 'team') => Promise<User | undefined>;
+  registerTeam: (teamData: any) => Promise<any>;
+  logout: () => void;
 };
 
-type RegisterData = {
-  username: string;
-  email: string;
-  password: string;
-  name: string;
-};
-
-
-
-export const AuthContext = createContext<AuthContextType | null>(null);
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const { toast } = useToast();
+  const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
+  const [, setLocation] = useLocation();
 
-  const {
-    data: user,
-    error,
-    isLoading,
-    
-  } = useQuery<User | null, Error>({
-    queryKey: ['/api/auth/me'],
-    queryFn: getQueryFn({ on401: "returnNull" }),
-    retry: false,
-    initialData: null,
-  });
-
-  // Check if user is admin
   useEffect(() => {
-    if (user && user.role === 'admin') {
-      setIsAdmin(true);
-    } else {
-      setIsAdmin(false);
-    }
-  }, [user]);
+    checkAuth();
+  }, []);
 
-  // Login function
-  const login = async (email: string, password: string): Promise<User> => {
+  const checkAuth = async () => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    setLoading(true);
     try {
-      const res = await apiRequest("POST", "/api/auth/login", { email, password });
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || "Login failed");
+      const response = await fetch('http://localhost:5000/api/verify', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        const userData = await response.json();
+        setUser(userData.user);
+        setIsAdmin(userData.user.role === 'admin');
+      } else {
+        logout();
       }
-      
-      const userData = await res.json();
-      
-      // Store token if provided
-      if (userData.token) {
-        localStorage.setItem('auth_token', userData.token);
+    } catch (error) {
+      console.error('Auth verification failed:', error);
+      logout();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const login = async (email: string, password: string, userType: 'admin' | 'team') => {
+    setLoading(true);
+    try {
+      const endpoint = userType === 'admin' ? '/api/login/admin' : '/api/login/team';
+      const response = await fetch(`http://localhost:5000${endpoint}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Login failed');
       }
-      
-      // Update the user in the cache
-      queryClient.setQueryData(['/api/auth/me'], userData.user);
-      
-      // Check if admin
-      if (userData.user && userData.user.role === 'admin') {
-        setIsAdmin(true);
-      }
-      
-      return userData;
+
+      const data = await response.json();
+      localStorage.setItem('token', data.token);
+      setUser(data.user);
+      setIsAdmin(data.user.role === 'admin');
+
+      toast({
+        title: "Login Successful!",
+        description: `Welcome back, ${data.user.name || data.user.email}!`,
+        variant: "default",
+      });
+
+      return data.user;
     } catch (error) {
       toast({
         title: "Login Failed",
-        description: error instanceof Error ? error.message : "An error occurred during login",
+        description: error instanceof Error ? error.message : "Invalid credentials",
         variant: "destructive",
       });
       throw error;
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Logout function
-  const logout = async (): Promise<void> => {
+  const registerTeam = async (teamData: any) => {
+    setLoading(true);
     try {
-      await apiRequest("POST", "/api/auth/logout");
-      
-      // Clear localStorage
-      localStorage.removeItem('auth_token');
-      
-      // Clear user from cache
-      queryClient.setQueryData(['/api/auth/me'], null);
-      setIsAdmin(false);
-      
-      toast({
-        title: "Logged Out",
-        description: "You have been successfully logged out",
+      const response = await fetch('http://localhost:5000/api/register-team', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(teamData),
       });
-    } catch (error) {
-      toast({
-        title: "Logout Failed",
-        description: error instanceof Error ? error.message : "An error occurred during logout",
-        variant: "destructive",
-      });
-      throw error;
-    }
-  };
 
-  // Register function
-  const register = async (userData: RegisterData): Promise<User> => {
-    try {
-      const res = await apiRequest("POST", "/api/auth/register", userData);
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || "Registration failed");
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Registration failed');
       }
-      
-      const newUser = await res.json();
-      
-      // Store token if provided
-      if (newUser.token) {
-        localStorage.setItem('auth_token', newUser.token);
-      }
-      
-      // Update the user in the cache
-      queryClient.setQueryData(['/api/auth/me'], newUser.user);
-      
+
+      const data = await response.json();
+      localStorage.setItem('token', data.token);
+      setUser(data.user);
+
       toast({
-        title: "Registration Successful",
-        description: "Your account has been created",
+        title: "Registration Successful!",
+        description: "Your team has been registered successfully.",
+        variant: "default",
       });
-      
-      return newUser;
+
+      if (data.credentials) {
+        toast({
+          title: "Save Your Credentials",
+          description: `Leader: ${data.credentials[0].email} | Password: ${data.credentials[0].password}`,
+          variant: "default",
+          duration: 10000,
+        });
+
+        if (data.credentials.length > 1) {
+          data.credentials.slice(1).forEach((cred: any, index: number) => {
+            toast({
+              title: `Member ${index + 1} Credentials`,
+              description: `Email: ${cred.email} | Password: ${cred.password}`,
+              variant: "default",
+              duration: 10000,
+            });
+          });
+        }
+      }
+
+      return data;
     } catch (error) {
       toast({
         title: "Registration Failed",
@@ -146,22 +155,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         variant: "destructive",
       });
       throw error;
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Create a properly-typed context value
-  const contextValue: AuthContextType = {
-    user: user || null,
-    isLoading,
-    error,
-    isAdmin,
-    login,
-    logout,
-    register
+  const logout = () => {
+    localStorage.removeItem('token');
+    setUser(null);
+    setIsAdmin(false);
+    setLocation('/login');
+    toast({
+      title: "Logged Out",
+      description: "You have been successfully logged out.",
+      variant: "default",
+    });
   };
 
   return (
-    <AuthContext.Provider value={contextValue}>
+    <AuthContext.Provider value={{ user, isAdmin, loading, login, registerTeam, logout }}>
       {children}
     </AuthContext.Provider>
   );
@@ -169,8 +181,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider");
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
 }
